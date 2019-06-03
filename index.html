@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Survey Response Summariser (SRS)</title>
+    <meta charset="utf-8" />
+</head>
+
+<body>
+    <input id="file-input" type="file" multiple>
+    <p id="column-selection-message"></p>
+    <div id="column-selection"></div>
+    <br>
+    <button onclick="downloadSummary()">Download Summary</button>
+
+    <script type="text/javascript" src="//unpkg.com/xlsx/dist/shim.min.js"></script>
+    <script type="text/javascript" src="//unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script type="text/javascript">
+        var input = document.getElementById('file-input');
+        var column_selection_message = document.getElementById('column-selection-message');
+        var column_selections = document.getElementById('column-selection');
+
+        var input_json = []
+        var columns = []
+        var selected_columns = []
+
+        function generateColumnSelections(json, keys) {
+            let checkboxes = ''
+            for (let i = 0; i < keys.length; i++) {
+                checkboxes += '<input id="checkbox' + i + '" type="checkbox" checked>' + keys[i] + '<br>'
+            }
+            selected_columns = keys;
+            column_selections.innerHTML = checkboxes;
+            column_selection_message.innerText = "Columns to be Summarised:"
+        }
+
+        function summariseResponse(json, keys, selected_keys) {
+            let results = [];
+            for (let i = 0; i < json.length; i++) {
+                for (let k = 0; k < keys.length; k++) {
+                    if (selected_keys.indexOf(keys[k]) > -1) {
+                        let index = results.findIndex(r => r.question_no === k && r.option === json[i][keys[k]])
+                        if (index > -1) {
+                            results[index].count++;
+                        } else {
+                            results.push({
+                                question_no: k,
+                                question: keys[k],
+                                option: json[i][keys[k]],
+                                count: 1
+                            })
+                        }
+                    }
+                }
+            }
+            results.sort((a, b) => a.question_no - b.question_no);
+            for (let i = 0; i < results.length; i++) {
+                delete results[i].question_no;
+            }
+            return results;
+        }
+
+        function handleFile(e) {
+            var files = e.target.files, f = files[0];
+            var reader = new FileReader();
+            reader.onload = function (e) {
+                var data = new Uint8Array(e.target.result);
+                var workbook = XLSX.read(data, { type: 'array' });
+                input_json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                columns = Object.keys(input_json[0]);
+                generateColumnSelections(input_json, columns);
+            };
+            reader.readAsArrayBuffer(f);
+        }
+
+        function downloadSummary() {
+            for (let i = columns.length - 1; i >= 0; i--) {
+                if (!document.getElementById('checkbox' + i).checked) {
+                    selected_columns.splice(i, 1);
+                }
+            }
+            let output_json = summariseResponse(input_json, columns, selected_columns);
+            let output_sheet = XLSX.utils.json_to_sheet(output_json)
+            var output_workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(output_workbook, output_sheet, "Summary");
+            XLSX.writeFile(output_workbook, "summary.xlsx");
+        }
+
+        input.addEventListener('change', handleFile)
+    </script>
+</body>
